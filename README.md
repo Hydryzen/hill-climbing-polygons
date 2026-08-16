@@ -12,7 +12,15 @@ The project is designed to run on Windows, Linux and macOS, and includes a check
 - (1+1) hill-climbing optimization algorithm with local mutation.
 - Local region rendering to improve performance.
 - Automatic checkpointing system to resume interrupted executions.
+## Installation
 
+Clone the repository and install the dependencies:
+
+```bash
+git clone https://github.com/Hydryzen/hill-climbing-polygons.git
+cd hill-climbing-polygons
+pip install -r requirements.txt
+```
 ## Dependencies
 
 The project requires the following Python libraries:
