@@ -13,3 +13,9 @@ El proyecto está diseñado para ejecutarse en Windows, Linux y macOS, y cuenta 
 - Renderizado local por región afectada para mejorar el rendimiento.
 - Sistema de checkpointing automático para reanudar ejecuciones interrumpidas.
 
+## Resultados
+
+Evolución del algoritmo a lo largo de las iteraciones:
+
+<img width="425" height="686" alt="evolucion" src="https://github.com/user-attachments/assets/f9ade39e-fbb0-426a-a5e2-7881c9077855" />
+
