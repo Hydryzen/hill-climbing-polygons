@@ -3,17 +3,9 @@
 Reconstrucción de imagen con polígonos — (1+1) hill-climbing con
 re-renderizado LOCAL (solo el bounding box afectado).
 
-v2 — correcciones sobre la versión anterior:
-  - Se eliminó código muerto en _render_region (creaba una imagen PIL
-    extra sin usarla, en CADA intento — costoso en un teléfono).
   - Checkpoint real: guarda el genoma (lista de polígonos) cada N
-    intentos en un .pkl y puede reanudar si el proceso muere (pantalla
-    apagada, Termux matado por Android, batería, etc.). Esto era un
-    punto pendiente en tu propio backlog (EPIC 1.8/1.9) y en Termux es
-    más importante que en escritorio.
+    intentos en un .pkl y puede reanudar si el proceso muere.
   - Guarda al recibir Ctrl+C / SIGTERM, no solo cada N intentos.
-
-Adaptado para ruka_referencia.png (425x686).
 """
 import argparse
 import os
