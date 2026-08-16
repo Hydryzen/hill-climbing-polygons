@@ -21,8 +21,12 @@ The project requires the following Python libraries:
 - `Pillow >= 10.0.0`
 
 ## Results
+The following results were obtained using a custom reference image created by the author.
 
 Evolution of the algorithm over iterations:
+
+Original image:
+<img width="425" height="686" alt="ruka_referencia" src="https://github.com/user-attachments/assets/fe535532-81c7-4d38-b320-d0d65774b43b" />
 
 Attempt number 5000:
 <img width="425" height="686" alt="snap_005000" src="https://github.com/user-attachments/assets/c8caee4f-605b-43de-a635-ba24ade53564" />
