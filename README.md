@@ -1,21 +1,34 @@
-# Algoritmo Evolutivo de Polígonos
+# Polygon Evolution Algorithm
 
-## Descripción
+## Description
 
-Este proyecto implementa un algoritmo de reconstrucción de imágenes mediante polígonos semitransparentes, utilizando la estrategia de optimización (1+1) hill-climbing. El sistema toma una imagen de referencia y genera una representación aproximada compuesta por triángulos o cuadriláteros, cuyos atributos (posición, color, opacidad) se ajustan iterativamente para minimizar el error cuadrático medio (MSE) respecto a la imagen original.
+This project implements an image reconstruction algorithm using semi-transparent polygons, with a (1+1) hill-climbing optimization strategy. The system takes a reference image and generates an approximate representation composed of triangles or quadrilaterals, whose attributes (position, color, opacity) are iteratively adjusted to minimize the Mean Squared Error (MSE) relative to the original image.
 
-El proyecto está diseñado para ejecutarse en Windows, Linux y macOS, y cuenta con un sistema de checkpointing que permite interrumpir y reanudar la ejecución sin pérdida de progreso.
+The project is designed to run on Windows, Linux and macOS, and includes a checkpointing system that allows interrupting and resuming execution without losing progress.
 
-## Características
+## Features
 
-- Reconstrucción de imágenes mediante polígonos.
-- Algoritmo de optimización (1+1) hill-climbing con mutación local.
-- Renderizado local por región afectada para mejorar el rendimiento.
-- Sistema de checkpointing automático para reanudar ejecuciones interrumpidas.
+- Image reconstruction using polygons.
+- (1+1) hill-climbing optimization algorithm with local mutation.
+- Local region rendering to improve performance.
+- Automatic checkpointing system to resume interrupted executions.
 
-## Resultados
+## Dependencies
 
-Evolución del algoritmo a lo largo de las iteraciones:
+The project requires the following Python libraries:
 
+- `numpy >= 1.24.0`
+- `Pillow >= 10.0.0`
+
+## Results
+
+Evolution of the algorithm over iterations:
+
+Attempt number 5000:
+<img width="425" height="686" alt="snap_005000" src="https://github.com/user-attachments/assets/c8caee4f-605b-43de-a635-ba24ade53564" />
+
+Attempt number 2000000:
+<img width="425" height="686" alt="snap_2000000" src="https://github.com/user-attachments/assets/0633f889-f62d-4e1c-9ff0-bf9afee54509" />
+
+Evolution:
 <img width="425" height="686" alt="evolucion" src="https://github.com/user-attachments/assets/f9ade39e-fbb0-426a-a5e2-7881c9077855" />
-
