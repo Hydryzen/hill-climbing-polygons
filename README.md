@@ -4,7 +4,6 @@
 
 This project implements an image reconstruction algorithm using semi-transparent polygons, with a (1+1) hill-climbing optimization strategy. The system takes a reference image and generates an approximate representation composed of triangles or quadrilaterals, whose attributes (position, color, opacity) are iteratively adjusted to minimize the Mean Squared Error (MSE) relative to the original image.
 
-The project is designed to run on Windows, Linux and macOS, and includes a checkpointing system that allows interrupting and resuming execution without losing progress.
 
 ## Features
 
