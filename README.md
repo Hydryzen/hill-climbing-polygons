@@ -40,9 +40,4 @@ The following results were obtained using a custom reference image created by th
 | :---: | :---: | :---: |
 | <img width="200" alt="ruka_referencia" src="https://github.com/user-attachments/assets/fe535532-81c7-4d38-b320-d0d65774b43b" /> | <img width="200" alt="snap_005000" src="https://github.com/user-attachments/assets/c8caee4f-605b-43de-a635-ba24ade53564" /> | <img width="200" alt="snap_2000000" src="https://github.com/user-attachments/assets/0633f889-f62d-4e1c-9ff0-bf9afee54509" /> |
 
-## What's next?
 
-If I had more time to iterate on this project, I would:
-* **Multiprocessing:** Parallelize the evaluation of mutations using Python's `multiprocessing` module to speed up execution on multi-core machines.
-* **Simulated Annealing:** Introduce a temperature parameter to occasionally accept worse mutations early on, helping the algorithm escape local minima.
-* **Refactor:** Translate the script names and internal comments to English to make the codebase fully accessible to international open-source contributors.
