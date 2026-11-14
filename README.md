@@ -1,8 +1,15 @@
 # Polygon Evolution Algorithm
 
+<img width="425" height="686" alt="evolucion" src="https://github.com/user-attachments/assets/f9ade39e-fbb0-426a-a5e2-7881c9077855" />
+
 ## Description
 
 This project implements an image reconstruction algorithm using semi-transparent polygons, with a (1+1) hill-climbing optimization strategy. The system takes a reference image and generates an approximate representation composed of triangles or quadrilaterals, whose attributes (position, color, opacity) are iteratively adjusted to minimize the Mean Squared Error (MSE) relative to the original image.
+
+## Why this project? 
+* **Why (1+1) Hill-Climbing instead of a Genetic Algorithm?** To keep the implementation lightweight and reduce memory overhead, while still achieving excellent local optimization.
+* **Why Local Region Rendering?** Calculating the MSE of the entire image for every single mutation is computationally expensive. I implemented a local region rendering approach, which only recalculates the MSE for the bounding box affected by the mutated polygon. This drastically improved the iterations-per-second rate.
+* **Checkpointing:** Evolutionary algorithms take a long time. I built an automatic checkpointing system so long-running executions can be safely interrupted and resumed without losing progress.
 
 
 ## Features
