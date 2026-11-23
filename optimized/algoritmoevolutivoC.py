@@ -1,20 +1,4 @@
-#!/usr/bin/env python3
-"""
-Reconstrucción de imagen con polígonos — (1+1) hill-climbing con
-re-renderizado LOCAL (solo el bounding box afectado).
 
-v2 — correcciones sobre la versión anterior:
-  - Se eliminó código muerto en _render_region (creaba una imagen PIL
-    extra sin usarla, en CADA intento — costoso en un teléfono).
-  - Checkpoint real: guarda el genoma (lista de polígonos) cada N
-    intentos en un .pkl y puede reanudar si el proceso muere (pantalla
-    apagada, Termux matado por Android, batería, etc.). Esto era un
-    punto pendiente en tu propio backlog (EPIC 1.8/1.9) y en Termux es
-    más importante que en escritorio.
-  - Guarda al recibir Ctrl+C / SIGTERM, no solo cada N intentos.
-print
-Adaptado para ruka_referencia.png (425x686).
-""" 
 import argparse
 import os
 import pickle
@@ -24,7 +8,7 @@ import sys
 import time
 import numpy as np
 from PIL import Image, ImageDraw
-
+import ctypes
 
 class Poly:
     __slots__ = ("pts", "color", "alpha", "kind")
@@ -47,6 +31,92 @@ class Poly:
     def clone(self):
         return Poly(list(self.pts), self.color, self.alpha, self.kind)
 
+class CRenderer:
+    def __init__(self, library_path=None):
+        if library_path is None:
+            library_path = os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                "renderer.so"
+            )
+
+        self.lib = ctypes.CDLL(library_path)
+
+        FloatPtr = ctypes.POINTER(ctypes.c_float)
+        IntPtr = ctypes.POINTER(ctypes.c_int)
+        BytePtr = ctypes.POINTER(ctypes.c_uint8)
+
+        self.lib.render_region_local.argtypes = [
+            FloatPtr,
+            FloatPtr,
+            IntPtr,
+            IntPtr,
+            BytePtr,
+            BytePtr,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+        ]
+
+        self.lib.render_region_local.restype = None
+
+    def render(self, background, polys, image_width, image_height,
+               x0, y0, x1, y1):
+
+        rw = x1 - x0
+        rh = y1 - y0
+
+        polygon_count = len(polys)
+
+        total_points = sum(len(p.pts) for p in polys)
+
+        # Buffers contiguos para C.
+        vertices = np.empty(max(1, total_points * 2), dtype=np.int32)
+        offsets = np.empty(polygon_count + 1, dtype=np.int32)
+        colors = np.empty(max(1, polygon_count * 3), dtype=np.uint8)
+        alphas = np.empty(max(1, polygon_count), dtype=np.uint8)
+
+        offsets[0] = 0
+
+        point_cursor = 0
+
+        for i, p in enumerate(polys):
+            for px, py in p.pts:
+                vertices[point_cursor * 2] = px
+                vertices[point_cursor * 2 + 1] = py
+                point_cursor += 1
+
+            offsets[i + 1] = point_cursor
+
+            colors[i * 3:i * 3 + 3] = p.color
+            alphas[i] = p.alpha
+
+        output = np.empty((rh, rw, 3), dtype=np.float32)
+
+        FloatPtr = ctypes.POINTER(ctypes.c_float)
+        IntPtr = ctypes.POINTER(ctypes.c_int)
+        BytePtr = ctypes.POINTER(ctypes.c_uint8)
+
+        self.lib.render_region_local(
+            output.ctypes.data_as(FloatPtr),
+            background.ctypes.data_as(FloatPtr),
+            vertices.ctypes.data_as(IntPtr),
+            offsets.ctypes.data_as(IntPtr),
+            colors.ctypes.data_as(BytePtr),
+            alphas.ctypes.data_as(BytePtr),
+            polygon_count,
+            image_width,
+            image_height,
+            x0,
+            y0,
+            x1,
+            y1
+        )
+
+        return output
 
 def random_poly(w, h, target_arr, kind="triangle"):
     n_pts = {"triangle": 3, "quad": 4}.get(kind, 3)
@@ -64,38 +134,86 @@ def random_poly(w, h, target_arr, kind="triangle"):
     return Poly(pts, color, alpha, kind)
 
 
+
+
+
 class Canvas:
-    def __init__(self, w, h, bg, target_arr, polys=None):
+    def __init__(self, w, h, bg, target_arr, polys=None,
+                 c_renderer=None):
         self.w, self.h = w, h
         self.bg = np.array(bg, dtype=np.float32)
         self.target = target_arr.astype(np.float32)
         self.polys = polys or []
-        # Renderiza el estado inicial completo UNA sola vez (barato:
-        # pasa una vez al arrancar o al reanudar, nunca más).
+        self.c_renderer = c_renderer
+
+        self._scratch = None
+        self._scratch_draw = None
+
+        if self.c_renderer is None:
+            self._scratch = Image.new(
+                "RGBA", (w, h), (0, 0, 0, 0)
+            )
+            self._scratch_draw = ImageDraw.Draw(self._scratch)
+
         self.canvas = self._render_region(0, 0, w, h, self.polys)
         diff = self.canvas - self.target
         self.total_sq_err = float(np.sum(diff * diff))
 
     def _render_region(self, x0, y0, x1, y1, polys):
         rw, rh = x1 - x0, y1 - y0
+
         if rw <= 0 or rh <= 0:
             return None
+
+        if self.c_renderer is not None:
+            return self.c_renderer.render(
+                self.bg, polys, self.w, self.h,
+                x0, y0, x1, y1
+            )
+
         region = np.tile(self.bg, (rh, rw, 1)).astype(np.float32)
+
         for p in polys:
             pb0x, pb0y, pb1x, pb1y = p.bbox(self.w, self.h)
-            if pb1x <= x0 or pb0x >= x1 or pb1y <= y0 or pb0y >= y1:
+
+            if (pb1x <= x0 or pb0x >= x1 or
+                    pb1y <= y0 or pb0y >= y1):
                 continue
-            layer = Image.new("RGBA", (rw, rh), (0, 0, 0, 0))
-            d = ImageDraw.Draw(layer)
-            shifted = [(px - x0, py - y0) for px, py in p.pts]
-            d.polygon(shifted, fill=(*p.color, p.alpha))
-            larr = np.array(layer, dtype=np.float32)
+
+            ix0 = max(x0, pb0x)
+            iy0 = max(y0, pb0y)
+            ix1 = min(x1, pb1x)
+            iy1 = min(y1, pb1y)
+
+            self._scratch_draw.polygon(
+                p.pts,
+                fill=(*p.color, p.alpha)
+            )
+
+            layer = self._scratch.crop((ix0, iy0, ix1, iy1))
+            larr = np.asarray(layer, dtype=np.float32)
             a = larr[:, :, 3:4] / 255.0
-            region = larr[:, :, :3] * a + region * (1 - a)
+
+            ry0, ry1 = iy0 - y0, iy1 - y0
+            rx0, rx1 = ix0 - x0, ix1 - x0
+
+            region_slice = region[ry0:ry1, rx0:rx1]
+
+            region[ry0:ry1, rx0:rx1] = (
+                larr[:, :, :3] * a +
+                region_slice * (1 - a)
+            )
+
+            self._scratch.paste(
+                (0, 0, 0, 0),
+                (pb0x, pb0y, pb1x, pb1y)
+            )
+
         return region
 
     def try_mutation(self, mutate_fn):
         new_polys, (x0, y0, x1, y1) = mutate_fn(self.polys)
+
         old_region = self.canvas[y0:y1, x0:x1, :]
         target_region = self.target[y0:y1, x0:x1, :]
         old_err = float(np.sum((old_region - target_region) ** 2))
@@ -113,7 +231,9 @@ class Canvas:
         self.total_sq_err += delta
 
     def to_image(self):
-        return Image.fromarray(np.clip(self.canvas, 0, 255).astype(np.uint8))
+        return Image.fromarray(
+            np.clip(self.canvas, 0, 255).astype(np.uint8)
+        )
 
 
 def mse(canvas):
@@ -141,22 +261,32 @@ def load_checkpoint(path):
         return None
 
 
-def run(target_path, out_dir, n_polys=600, attempts=200000, shape="triangle",
-        seed=42, snapshot_every=5000, checkpoint_every=1000,
-        checkpoint_path=None):
+def run(target_path, out_dir, n_polys=600, attempts=200000,
+        shape="triangle", seed=42, snapshot_every=5000,
+        checkpoint_every=1000, checkpoint_path=None,
+        renderer="python", renderer_lib=None):
     os.makedirs(out_dir, exist_ok=True)
     checkpoint_path = checkpoint_path or os.path.join(out_dir, "checkpoint.pkl")
 
     target_img = Image.open(target_path).convert("RGB")
     w, h = target_img.size
     target_arr = np.array(target_img)
-
+    if renderer == "c":
+        c_renderer = CRenderer(renderer_lib)
+        print("Renderizador: C")
+    else:
+        c_renderer = None
+        print("Renderizador: Python/Pillow")
     ckpt = load_checkpoint(checkpoint_path)
     if ckpt and ckpt["w"] == w and ckpt["h"] == h:
         random.seed(ckpt["seed"])
         np.random.seed(ckpt["seed"])
         bg = ckpt["bg"]
-        canvas = Canvas(w, h, bg, target_arr, polys=ckpt["polys"])
+        canvas = Canvas(
+            w, h, bg, target_arr,
+            polys=ckpt["polys"],
+            c_renderer=c_renderer
+        )
         start_attempt = ckpt["attempt"]
         print(f"Reanudando desde intento {start_attempt} "
               f"({len(canvas.polys)} polígonos ya aceptados)")
@@ -164,7 +294,10 @@ def run(target_path, out_dir, n_polys=600, attempts=200000, shape="triangle",
         random.seed(seed)
         np.random.seed(seed)
         bg = tuple(int(c) for c in target_arr.reshape(-1, 3).mean(axis=0))
-        canvas = Canvas(w, h, bg, target_arr)
+        canvas = Canvas(
+            w, h, bg, target_arr,
+            c_renderer=c_renderer
+        )
         start_attempt = 0
         print(f"Empezando desde cero. Imagen: {w}x{h}")
 
@@ -268,7 +401,14 @@ if __name__ == "__main__":
     ap.add_argument("--shape", default="triangle", choices=["triangle", "quad"])
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--checkpoint-every", type=int, default=1000)
+    ap.add_argument("--renderer", choices=["python", "c"], default="python")
+    ap.add_argument("--renderer-lib", default=None)
     args = ap.parse_args()
-    run(args.target, args.out, args.n, args.attempts, args.shape, args.seed,
-        checkpoint_every=args.checkpoint_every)
+    run(
+    args.target, args.out, args.n, args.attempts,
+    args.shape, args.seed,
+    checkpoint_every=args.checkpoint_every,
+    renderer=args.renderer,
+    renderer_lib=args.renderer_lib
+    )
 

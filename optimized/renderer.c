@@ -42,51 +42,69 @@ static void add_edge(Edge *e, int x0, int y0, int x1, int y1)
     e->x0 = x0;
     e->y0 = y0;
 }
-
 static void mark_horizontal(
     uint8_t *mask,
     int width,
     int height,
+    int origin_x,
+    int origin_y,
     int x0,
     int y,
     int x1
 )
 {
-    if (y < 0 || y >= height) return;
+    if (y < origin_y || y >= origin_y + height) return;
 
-    if (x0 < 0) x0 = 0;
-    if (x1 >= width) x1 = width - 1;
+    if (x0 < origin_x) x0 = origin_x;
+    if (x1 >= origin_x + width) x1 = origin_x + width - 1;
 
     if (x0 > x1) return;
 
-    memset(mask + y * width + x0, 1, (size_t)(x1 - x0 + 1));
+    int local_y = y - origin_y;
+    int local_x = x0 - origin_x;
+
+    memset(
+        mask + local_y * width + local_x,
+        1,
+        (size_t)(x1 - x0 + 1)
+    );
 }
 
 static void mark_interval(
     uint8_t *mask,
     int width,
     int height,
+    int origin_x,
+    int origin_y,
     int x0,
     int y,
     int x1
 )
 {
-    if (y < 0 || y >= height) return;
+    if (y < origin_y || y >= origin_y + height) return;
 
-    if (x0 < 0) x0 = 0;
-    if (x1 >= width) x1 = width - 1;
+    if (x0 < origin_x) x0 = origin_x;
+    if (x1 >= origin_x + width) x1 = origin_x + width - 1;
 
     if (x0 > x1) return;
 
-    memset(mask + y * width + x0, 1, (size_t)(x1 - x0 + 1));
-}
+    int local_y = y - origin_y;
+    int local_x = x0 - origin_x;
 
+    memset(
+        mask + local_y * width + local_x,
+        1,
+        (size_t)(x1 - x0 + 1)
+    );
+}
 static int rasterize_polygon(
     uint8_t *mask,
     int width,
     int height,
     const int *vertices,
-    int count
+    int count,
+    int origin_x,
+    int origin_y
 )
 {
     if (count < 3) return 0;
@@ -137,8 +155,8 @@ static int rasterize_polygon(
         );
     }
 
-    int ymin = height - 1;
-    int ymax = 0;
+    int ymin = origin_y + height - 1;
+    int ymax = origin_y;
 
     // Pillow dibuja las aristas horizontales por separado.
     for (int i = 0; i < n; i++) {
@@ -150,13 +168,20 @@ static int rasterize_polygon(
         if (e->ymin == e->ymax) {
             mark_horizontal(
                 mask, width, height,
+                origin_x, origin_y,
                 e->xmin, e->ymin, e->xmax
             );
         }
     }
 
-    if (ymin < 0) ymin = 0;
-    if (ymax >= height) ymax = height - 1;
+    // Conservar el límite real del polígono antes de
+    // recortar el recorrido a la región local.
+    int polygon_ymax = ymax;
+
+    if (ymin < origin_y) ymin = origin_y;
+    if (ymax >= origin_y + height) {
+        ymax = origin_y + height - 1;
+    }
 
     int edge_count = 0;
 
@@ -195,7 +220,7 @@ static int rasterize_polygon(
                 xx[j++] =
                     (y - current->y0) * current->dx + current->x0;
 
-                if (y == current->ymax && y < ymax) {
+                if (y == current->ymax && y < polygon_ymax) {
                     xx[j] = xx[j - 1];
                     j++;
                 }
@@ -263,6 +288,7 @@ static int rasterize_polygon(
 
             mark_interval(
                 mask, width, height,
+                origin_x, origin_y,
                 x_start, y, x_end
             );
         }
@@ -372,7 +398,9 @@ void render_region(
             width,
             height,
             poly_vertices,
-            count
+            count,
+            0,
+            0
         ) != 0) {
             continue;
         }
@@ -397,6 +425,146 @@ void render_region(
                 if (!mask[mask_index]) continue;
 
                 int output_index = mask_index * 3;
+
+                output[output_index] =
+                    r * alpha + output[output_index] * inverse_alpha;
+
+                output[output_index + 1] =
+                    g * alpha + output[output_index + 1] * inverse_alpha;
+
+                output[output_index + 2] =
+                    b * alpha + output[output_index + 2] * inverse_alpha;
+            }
+        }
+    }
+
+    free(mask);
+}
+
+void render_region_local(
+    float *output,
+    const float *background,
+    const int *vertices,
+    const int *offsets,
+    const uint8_t *colors,
+    const uint8_t *alphas,
+    int polygon_count,
+    int image_width,
+    int image_height,
+    int x0,
+    int y0,
+    int x1,
+    int y1
+)
+{
+    if (!output || !background || !vertices || !offsets ||
+        !colors || !alphas ||
+        polygon_count < 0 ||
+        image_width <= 0 || image_height <= 0 ||
+        x0 < 0 || y0 < 0 ||
+        x1 > image_width || y1 > image_height ||
+        x1 <= x0 || y1 <= y0) {
+        return;
+    }
+
+    int width = x1 - x0;
+    int height = y1 - y0;
+
+    size_t pixels = (size_t)width * (size_t)height;
+
+    if (pixels > SIZE_MAX / (3 * sizeof(float))) {
+        return;
+    }
+
+    // Inicializar únicamente la región.
+    for (size_t i = 0; i < pixels; i++) {
+        output[i * 3]     = background[0];
+        output[i * 3 + 1] = background[1];
+        output[i * 3 + 2] = background[2];
+    }
+
+    uint8_t *mask = calloc(pixels, sizeof(uint8_t));
+
+    if (!mask) return;
+
+    for (int p = 0; p < polygon_count; p++) {
+        int start = offsets[p];
+        int count = offsets[p + 1] - start;
+
+        if (count < 3) continue;
+
+        const int *poly_vertices = &vertices[start * 2];
+
+        // Bounding box del polígono.
+        int min_x = poly_vertices[0];
+        int max_x = poly_vertices[0];
+        int min_y = poly_vertices[1];
+        int max_y = poly_vertices[1];
+
+        for (int i = 1; i < count; i++) {
+            int x = poly_vertices[i * 2];
+            int y = poly_vertices[i * 2 + 1];
+
+            if (x < min_x) min_x = x;
+            if (x > max_x) max_x = x;
+
+            if (y < min_y) min_y = y;
+            if (y > max_y) max_y = y;
+        }
+
+        // Comprobar intersección con la región.
+        if (max_x < x0 || min_x >= x1 ||
+            max_y < y0 || min_y >= y1) {
+            continue;
+        }
+
+        // Recortar bounding box a la región.
+        if (min_x < x0) min_x = x0;
+        if (min_y < y0) min_y = y0;
+
+        if (max_x >= x1) max_x = x1 - 1;
+        if (max_y >= y1) max_y = y1 - 1;
+
+        int box_width = max_x - min_x + 1;
+
+        // Limpiar únicamente la máscara afectada.
+        for (int y = min_y; y <= max_y; y++) {
+            size_t index =
+                (size_t)(y - y0) * width + (min_x - x0);
+
+            memset(mask + index, 0, (size_t)box_width);
+        }
+
+        // Rasterizar usando las coordenadas originales.
+        if (rasterize_polygon(
+            mask,
+            width,
+            height,
+            poly_vertices,
+            count,
+            x0,
+            y0
+        ) != 0) {
+            continue;
+        }
+
+        float r = (float)colors[p * 3];
+        float g = (float)colors[p * 3 + 1];
+        float b = (float)colors[p * 3 + 2];
+
+        float alpha = (float)alphas[p] / 255.0f;
+        float inverse_alpha = 1.0f - alpha;
+
+        // Composición alpha local.
+        for (int y = min_y; y <= max_y; y++) {
+            size_t row_offset = (size_t)(y - y0) * width;
+
+            for (int x = min_x; x <= max_x; x++) {
+                size_t mask_index = row_offset + (x - x0);
+
+                if (!mask[mask_index]) continue;
+
+                size_t output_index = mask_index * 3;
 
                 output[output_index] =
                     r * alpha + output[output_index] * inverse_alpha;

@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*.so
+optimized/tests/prueba_rutas/
+optimized/tests/prueba_rutas_python/
+optimized/tests/comparacion_100k/
+
+# Resultados y archivos generados
+comparacion_100k/
+test_*_c.png
+test_*_pillow.png
+
+# Copias locales
+algoritmoevolutivo_backup.py
