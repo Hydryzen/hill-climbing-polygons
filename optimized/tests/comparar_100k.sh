@@ -5,7 +5,7 @@ set -o pipefail
 
 # Directorios absolutos basados en la ubicación de este script
 TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(dirname "$TESTS_DIR")" # Subimos un nivel para encontrar hill_climbing.py
+PROJECT_DIR="$(dirname "$OPTIMIZED_DIR")" # Subimos un nivel para encontrar hill_climbing.py
 
 BASE="$TESTS_DIR/comparacion_100k"
 
