@@ -275,6 +275,7 @@ static int rasterize_polygon(
     return 0;
 }
 
+
 void render_region(
     float *output,
     const float *background,
@@ -295,6 +296,7 @@ void render_region(
 
     int pixels = width * height;
 
+    // Inicializar imagen de salida.
     for (int i = 0; i < pixels; i++) {
         output[i * 3]     = background[0];
         output[i * 3 + 1] = background[1];
@@ -310,38 +312,101 @@ void render_region(
 
         if (count < 3) continue;
 
-        memset(mask, 0, (size_t)pixels);
+        const int *poly_vertices = &vertices[start * 2];
+
+        // ------------------------------------------
+        // Calcular bounding box del polígono.
+        // ------------------------------------------
+
+        int min_x = poly_vertices[0];
+        int max_x = poly_vertices[0];
+        int min_y = poly_vertices[1];
+        int max_y = poly_vertices[1];
+
+        for (int i = 1; i < count; i++) {
+            int x = poly_vertices[i * 2];
+            int y = poly_vertices[i * 2 + 1];
+
+            if (x < min_x) min_x = x;
+            if (x > max_x) max_x = x;
+
+            if (y < min_y) min_y = y;
+            if (y > max_y) max_y = y;
+        }
+
+        // ------------------------------------------
+        // Recortar bounding box a la imagen.
+        // ------------------------------------------
+
+        if (max_x < 0 || max_y < 0 ||
+            min_x >= width || min_y >= height) {
+            continue;
+        }
+
+        if (min_x < 0) min_x = 0;
+        if (min_y < 0) min_y = 0;
+
+        if (max_x >= width) max_x = width - 1;
+        if (max_y >= height) max_y = height - 1;
+
+        int box_width = max_x - min_x + 1;
+
+        // ------------------------------------------
+        // Limpiar únicamente la región necesaria.
+        // ------------------------------------------
+
+        for (int y = min_y; y <= max_y; y++) {
+            memset(
+                mask + y * width + min_x,
+                0,
+                (size_t)box_width
+            );
+        }
+
+        // ------------------------------------------
+        // Rasterizar conservando el algoritmo actual.
+        // ------------------------------------------
 
         if (rasterize_polygon(
             mask,
             width,
             height,
-            &vertices[start * 2],
+            poly_vertices,
             count
         ) != 0) {
             continue;
         }
 
+        // ------------------------------------------
+        // Composición alpha limitada al bounding box.
+        // ------------------------------------------
+
         float r = (float)colors[p * 3];
         float g = (float)colors[p * 3 + 1];
         float b = (float)colors[p * 3 + 2];
+
         float alpha = (float)alphas[p] / 255.0f;
         float inverse_alpha = 1.0f - alpha;
 
-        // Cada píxel cubierto se mezcla exactamente una vez.
-        for (int i = 0; i < pixels; i++) {
-            if (!mask[i]) continue;
+        for (int y = min_y; y <= max_y; y++) {
+            int row_offset = y * width;
 
-            int index = i * 3;
+            for (int x = min_x; x <= max_x; x++) {
+                int mask_index = row_offset + x;
 
-            output[index] =
-                r * alpha + output[index] * inverse_alpha;
+                if (!mask[mask_index]) continue;
 
-            output[index + 1] =
-                g * alpha + output[index + 1] * inverse_alpha;
+                int output_index = mask_index * 3;
 
-            output[index + 2] =
-                b * alpha + output[index + 2] * inverse_alpha;
+                output[output_index] =
+                    r * alpha + output[output_index] * inverse_alpha;
+
+                output[output_index + 1] =
+                    g * alpha + output[output_index + 1] * inverse_alpha;
+
+                output[output_index + 2] =
+                    b * alpha + output[output_index + 2] * inverse_alpha;
+            }
         }
     }
 
