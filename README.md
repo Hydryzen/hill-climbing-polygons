@@ -23,7 +23,7 @@ The following results were obtained using a custom reference image created by th
 ```text
 hill-climbing-polygons/
 │
-├── hill_climbing.py.py
+├── hill_climbing.py
 ├── ruka_referencia.png
 ├── requirements.txt
 ├── README.md
