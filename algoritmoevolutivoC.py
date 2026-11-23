@@ -134,6 +134,7 @@ def random_poly(w, h, target_arr, kind="triangle"):
     return Poly(pts, color, alpha, kind)
 
 
+
 class Canvas:
     def __init__(self, w, h, bg, target_arr, polys=None,
                  c_renderer=None):
@@ -142,53 +143,42 @@ class Canvas:
         self.target = target_arr.astype(np.float32)
         self.polys = polys or []
         self.c_renderer = c_renderer
-        # Renderiza el estado inicial completo UNA sola vez (barato:
-        # pasa una vez al arrancar o al reanudar, nunca más).
+
         self.canvas = self._render_region(0, 0, w, h, self.polys)
         diff = self.canvas - self.target
         self.total_sq_err = float(np.sum(diff * diff))
 
-    
-def _render_region(self, x0, y0, x1, y1, polys):
-    rw, rh = x1 - x0, y1 - y0
+    def _render_region(self, x0, y0, x1, y1, polys):
+        rw, rh = x1 - x0, y1 - y0
 
-    if rw <= 0 or rh <= 0:
-        return None
+        if rw <= 0 or rh <= 0:
+            return None
 
-    # Backend C
-    if self.c_renderer is not None:
-        return self.c_renderer.render(
-            self.bg,
-            polys,
-            self.w,
-            self.h,
-            x0,
-            y0,
-            x1,
-            y1
-        )
+        if self.c_renderer is not None:
+            return self.c_renderer.render(
+                self.bg, polys, self.w, self.h,
+                x0, y0, x1, y1
+            )
 
-    # Backend Python/Pillow
-    region = np.tile(self.bg, (rh, rw, 1)).astype(np.float32)
+        region = np.tile(self.bg, (rh, rw, 1)).astype(np.float32)
 
-    for p in polys:
-        pb0x, pb0y, pb1x, pb1y = p.bbox(self.w, self.h)
+        for p in polys:
+            pb0x, pb0y, pb1x, pb1y = p.bbox(self.w, self.h)
 
-        if pb1x <= x0 or pb0x >= x1 or pb1y <= y0 or pb0y >= y1:
-            continue
+            if pb1x <= x0 or pb0x >= x1 or pb1y <= y0 or pb0y >= y1:
+                continue
 
-        layer = Image.new("RGBA", (rw, rh), (0, 0, 0, 0))
-        d = ImageDraw.Draw(layer)
+            layer = Image.new("RGBA", (rw, rh), (0, 0, 0, 0))
+            d = ImageDraw.Draw(layer)
 
-        shifted = [(px - x0, py - y0) for px, py in p.pts]
-        d.polygon(shifted, fill=(*p.color, p.alpha))
+            shifted = [(px - x0, py - y0) for px, py in p.pts]
+            d.polygon(shifted, fill=(*p.color, p.alpha))
 
-        larr = np.array(layer, dtype=np.float32)
-        a = larr[:, :, 3:4] / 255.0
-        region = larr[:, :, :3] * a + region * (1 - a)
+            larr = np.array(layer, dtype=np.float32)
+            a = larr[:, :, 3:4] / 255.0
+            region = larr[:, :, :3] * a + region * (1 - a)
 
-    return region
-
+        return region
 
     def try_mutation(self, mutate_fn):
         new_polys, (x0, y0, x1, y1) = mutate_fn(self.polys)
@@ -210,6 +200,8 @@ def _render_region(self, x0, y0, x1, y1, polys):
 
     def to_image(self):
         return Image.fromarray(np.clip(self.canvas, 0, 255).astype(np.uint8))
+
+       
 
 
 def mse(canvas):
@@ -247,13 +239,22 @@ def run(target_path, out_dir, n_polys=600, attempts=200000,
     target_img = Image.open(target_path).convert("RGB")
     w, h = target_img.size
     target_arr = np.array(target_img)
-
+    if renderer == "c":
+        c_renderer = CRenderer(renderer_lib)
+        print("Renderizador: C")
+    else:
+        c_renderer = None
+        print("Renderizador: Python/Pillow")
     ckpt = load_checkpoint(checkpoint_path)
     if ckpt and ckpt["w"] == w and ckpt["h"] == h:
         random.seed(ckpt["seed"])
         np.random.seed(ckpt["seed"])
         bg = ckpt["bg"]
-        canvas = Canvas(w, h, bg, target_arr, polys=ckpt["polys"])
+        canvas = Canvas(
+            w, h, bg, target_arr,
+            polys=ckpt["polys"],
+            c_renderer=c_renderer
+        )
         start_attempt = ckpt["attempt"]
         print(f"Reanudando desde intento {start_attempt} "
               f"({len(canvas.polys)} polígonos ya aceptados)")
@@ -261,7 +262,10 @@ def run(target_path, out_dir, n_polys=600, attempts=200000,
         random.seed(seed)
         np.random.seed(seed)
         bg = tuple(int(c) for c in target_arr.reshape(-1, 3).mean(axis=0))
-        canvas = Canvas(w, h, bg, target_arr)
+        canvas = Canvas(
+            w, h, bg, target_arr,
+            c_renderer=c_renderer
+        )
         start_attempt = 0
         print(f"Empezando desde cero. Imagen: {w}x{h}")
 
@@ -365,7 +369,14 @@ if __name__ == "__main__":
     ap.add_argument("--shape", default="triangle", choices=["triangle", "quad"])
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--checkpoint-every", type=int, default=1000)
+    ap.add_argument("--renderer", choices=["python", "c"], default="python")
+    ap.add_argument("--renderer-lib", default=None)
     args = ap.parse_args()
-    run(args.target, args.out, args.n, args.attempts, args.shape, args.seed,
-        checkpoint_every=args.checkpoint_every)
+    run(
+    args.target, args.out, args.n, args.attempts,
+    args.shape, args.seed,
+    checkpoint_every=args.checkpoint_every,
+    renderer=args.renderer,
+    renderer_lib=args.renderer_lib
+    )
 
