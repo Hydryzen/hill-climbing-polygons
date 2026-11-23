@@ -8,10 +8,7 @@ This project implements an image reconstruction algorithm using semi-transparent
 
 The algorithm takes a reference image and generates an approximate representation composed of triangles and quadrilaterals. Polygon attributes such as position, color, and opacity are iteratively modified to minimize the Mean Squared Error (MSE) between the generated image and the original.
 
-The project includes two implementations:
-
-- **Python:** Original implementation using Pillow for image rendering.
-- **C Renderer:** Optimized implementation using a custom C rendering engine integrated with Python through `ctypes`.
+The project includes an original Python implementation and an optimized implementation using a custom C rendering engine integrated with Python through `ctypes`.
 
 ## Results
 
@@ -32,17 +29,17 @@ hill-climbing-polygons/
 ├── README.md
 │
 └── optimized/
-    ├── algoritmoevolutivo.py
     ├── algoritmoevolutivoC.py
     ├── renderer.c
-    │
     └── tests/
         ├── test_renderer.py
         ├── benchmark_renderer.py
         └── comparar_100k.sh
 ```
 
-The `optimized/` directory contains the optimized implementations and the custom C renderer.
+The root directory contains the original Python implementation and the reference image.
+
+The `optimized/` directory contains the optimized implementation, where Python handles the optimization logic and the custom C renderer handles computationally intensive rendering operations.
 
 The `tests/` directory contains rendering equivalence tests and performance benchmarks.
 
@@ -70,7 +67,7 @@ This allows the optimization logic to remain in Python while computationally int
 
 ### Checkpointing
 
-Long-running evolutionary processes need to preserve their progress.
+Long-running optimization processes need to preserve their progress.
 
 The implementation includes an automatic checkpointing system that allows interrupted executions to resume without losing previously accumulated progress.
 
@@ -80,7 +77,7 @@ Two different benchmarks were conducted to evaluate the optimization.
 
 ### 1. Complete Algorithm Comparison
 
-Both implementations were evaluated using the same configuration:
+The Python and C implementations were evaluated using the same configuration:
 
 - Attempts: 100,000
 - Polygons: 600
@@ -97,6 +94,8 @@ Both implementations were evaluated using the same configuration:
 - 2.45× speedup.
 - 59.2% reduction in execution time.
 - Similar final reconstruction quality.
+
+The Python implementation used in this comparison is a previous optimized version that is no longer included in the repository.
 
 The implementations do not produce identical optimization trajectories, even with the same random seed. The final MSE difference is therefore reported rather than assuming identical behavior.
 
@@ -148,28 +147,14 @@ pip install -r requirements.txt
 
 ## Usage
 
-### Python Implementation
-
-Run the original Python implementation:
-
-```bash
-python3 optimized/algoritmoevolutivo.py \
-    --attempts 100000 \
-    --n 600 \
-    --seed 42 \
-    --out results/python
-```
-
-### C Renderer Implementation
-
-Compile the C renderer:
+### Compile the C Renderer
 
 ```bash
 gcc -O3 -shared -fPIC optimized/renderer.c \
     -o optimized/renderer.so -lm
 ```
 
-Run the optimized implementation:
+### Run the Optimized Implementation
 
 ```bash
 python3 optimized/algoritmoevolutivoC.py \
@@ -203,4 +188,3 @@ bash optimized/tests/comparar_100k.sh
 ```
 
 The C renderer tests compare the output against Pillow to verify pixel-level equivalence in the tested cases.
-
