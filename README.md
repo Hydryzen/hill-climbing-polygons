@@ -204,8 +204,3 @@ bash optimized/tests/comparar_100k.sh
 
 The C renderer tests compare the output against Pillow to verify pixel-level equivalence in the tested cases.
 
-## Conclusion
-
-This project explores the implementation and optimization of an image reconstruction algorithm through local search, incremental rendering, and low-level performance engineering.
-
-The transition from a pure Python renderer to a custom C rendering engine demonstrates how identifying computational bottlenecks and selectively optimizing them can substantially improve execution performance without requiring a complete rewrite of the algorithm.
